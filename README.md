@@ -25,6 +25,7 @@ The Gemini API processes resume text and job descriptions to help identify relev
 Update this list to match the technologies actually used in the repository.
 
 - **Frontend:** React, TypeScript, Tailwind CSS
+- **Backend:** JavaScript / TypeScript — server-side application logic, depending on the generated runtime.
 - **AI:** Google Gemini API
 - **Development:** Google AI Studio
 - **PDF Processing:** The PDF parsing library used by the project
