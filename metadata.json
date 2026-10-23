@@ -1,0 +1,7 @@
+{
+  "name": "SuperB Career Readiness",
+  "description": "AI-powered career readiness platform for students and graduates offering personalized skill development, ATS resume optimization, and mock interview preparation.",
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
