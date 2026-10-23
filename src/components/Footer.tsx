@@ -61,11 +61,6 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                   4-Week Learning Roadmap
                 </button>
               </li>
-              <li>
-                <button onClick={() => onNavigate('test-ai')} className="hover:text-cyan-400 transition-colors">
-                  Test AI Sandbox
-                </button>
-              </li>
             </ul>
           </div>
 

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { AnalysisResult, NavTab, MissingSkill, WeekPlan } from '../types';
+import React, { useState, useRef } from 'react';
+import { AnalysisResult, NavTab, SkillItem, PartiallyDemonstratedSkill, MissingSkillItem, PrioritizedGap, RecommendedProject } from '../types';
 import { 
   Target, 
   UploadCloud, 
@@ -7,13 +7,19 @@ import {
   Sparkles, 
   CheckCircle2, 
   AlertCircle, 
+  HelpCircle,
   ArrowRight, 
   Zap, 
-  RotateCcw,
-  Copy,
-  Briefcase,
-  Layers,
-  ChevronRight
+  Briefcase, 
+  Layers, 
+  RefreshCw,
+  FolderCode,
+  ShieldAlert,
+  Info,
+  Award,
+  ChevronRight,
+  FileCheck2,
+  X
 } from 'lucide-react';
 
 interface SkillGapAnalysisViewProps {
@@ -27,214 +33,142 @@ export const SkillGapAnalysisView: React.FC<SkillGapAnalysisViewProps> = ({
   onAnalysisComplete,
   onNavigate
 }) => {
-  const [targetRole, setTargetRole] = useState(currentAnalysis?.targetRole || 'Full Stack Software Engineer');
-  const [targetCompany, setTargetCompany] = useState(currentAnalysis?.targetCompany || 'Google / Tier-1 Tech');
+  // Form input states (preserve inputs)
+  const [jobTitle, setJobTitle] = useState(currentAnalysis?.targetRole || '');
+  const [experienceLevel, setExperienceLevel] = useState<'Beginner' | 'Intermediate' | 'Experienced'>(
+    currentAnalysis?.experienceLevel || 'Beginner'
+  );
   const [jobDescription, setJobDescription] = useState(currentAnalysis?.jobDescriptionSnippet || '');
   const [resumeText, setResumeText] = useState(currentAnalysis?.resumeSnippet || '');
-  const [fileName, setFileName] = useState(currentAnalysis?.resumeFileName || '');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [activePreset, setActivePreset] = useState<string>('fullstack');
+  const [uploadedFileName, setUploadedFileName] = useState(currentAnalysis?.resumeFileName || '');
 
-  // Sample presets for hackathon demonstration
-  const handleApplyPreset = (presetKey: string) => {
-    setActivePreset(presetKey);
-    if (presetKey === 'fullstack') {
-      setTargetRole('Full Stack Software Engineer');
-      setTargetCompany('Google / Cloudflare');
-      setJobDescription(`Seeking a Full Stack Engineer to build high-scale cloud platforms.
-Requirements:
-- Strong experience with React, TypeScript, and modern state management.
-- Backend proficiency in Node.js (Express or Fastify) and REST/GraphQL APIs.
-- Production experience with Redis in-memory caching and PostgreSQL.
-- Containerization with Docker and deployment via CI/CD pipelines (GitHub Actions).
-- Solid grasp of distributed systems, concurrency, and performance profiling.`);
-      setResumeText(`Computer Science Senior graduating in Spring 2026.
-Technical Skills: JavaScript, TypeScript, React.js, HTML5, CSS3, Tailwind CSS, Python, Node.js, Express, SQLite, Git, Linux.
-Projects:
-- Campus Club Management Portal: Built full-stack web application using React, Express, and SQLite for 500+ student members.
-- Hackathon Winner: Developed real-time collaborative whiteboarding tool in React with WebSockets.`);
-      setFileName('Alex_CS_Resume.pdf');
-    } else if (presetKey === 'aiml') {
-      setTargetRole('AI / Machine Learning Engineer');
-      setTargetCompany('Anthropic / OpenAI Ecosystem');
-      setJobDescription(`Seeking an AI/ML Engineer to train, fine-tune, and deploy multimodal LLMs.
-Requirements:
-- Deep Python proficiency, PyTorch, Hugging Face transformers.
-- Experience with Vector Databases (ChromaDB, Pinecone, pgvector) and RAG pipelines.
-- Knowledge of LangChain/LlamaIndex and Gemini API / OpenAI API.
-- Experience deploying ML models to AWS/GCP with Docker and FastAPI.
-- Evaluation metrics: BLEU, ROUGE, and latency optimization.`);
-      setResumeText(`CS & Mathematics graduate with focus on Data Science.
-Skills: Python, NumPy, Pandas, Scikit-learn, SQL, TensorFlow basics, Matplotlib, Jupyter, Git.
-Projects:
-- Sentiment Analysis Model: Fine-tuned BERT model on Twitter datasets with 89% accuracy.
-- Housing Price Prediction Engine: Regression pipeline built with Scikit-learn and Streamlit.`);
-      setFileName('Jordan_AIML_Resume.pdf');
-    } else if (presetKey === 'devops') {
-      setTargetRole('Cloud & DevOps Engineer');
-      setTargetCompany('Datadog / AWS Partner');
-      setJobDescription(`Looking for a Cloud DevOps Engineer to scale cloud infrastructure.
-Requirements:
-- Linux system administration and Bash/Python scripting.
-- Docker containerization and Kubernetes orchestration.
-- Infrastructure as Code (Terraform) and AWS/GCP services.
-- CI/CD automation with GitHub Actions or GitLab CI.
-- Observability and monitoring with Prometheus and Grafana.`);
-      setResumeText(`Information Technology student with passion for systems.
-Skills: Linux (Ubuntu), Bash scripting, Python basics, Docker desktop, Git, Networking basics (TCP/IP, DNS).
-Projects:
-- Self-hosted Homelab: Configured media and backup servers running in Docker containers.
-- Automated Backup Script: Wrote Python scripts to back up databases to S3.`);
-      setFileName('Morgan_DevOps_Resume.pdf');
+  // UI status states
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const [pdfUploadError, setPdfUploadError] = useState<string | null>(null);
+  const [pdfSuccessMessage, setPdfSuccessMessage] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Handle PDF file upload with 5MB validation and extraction
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPdfUploadError(null);
+    setPdfSuccessMessage(null);
+
+    // Validate file type
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setPdfUploadError('Please select a valid PDF file. Other file formats are not supported.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    // Validate file size (5MB max)
+    const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE_BYTES) {
+      setPdfUploadError(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Please upload a PDF under 5 MB or paste your text below.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setIsUploadingPdf(true);
+    setUploadedFileName(file.name);
+
+    try {
+      // Convert to base64
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Failed to read file from local disk.'));
+      });
+      reader.readAsDataURL(file);
+      const base64Data = await base64Promise;
+
+      // Send to server-side PDF parser
+      const response = await fetch('/api/resume/parse-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          base64Data,
+          fileName: file.name,
+        }),
+      });
+
+      const resData = await response.json();
+
+      if (!response.ok || !resData.success) {
+        throw new Error(resData.error || 'Failed to extract text from PDF.');
+      }
+
+      setResumeText(resData.text);
+      setPdfSuccessMessage(`Extracted ${resData.text.length} characters from ${file.name}`);
+    } catch (err: any) {
+      console.error('PDF extraction failed:', err);
+      setPdfUploadError(
+        err.message || 'Could not extract text from this PDF. Please copy and paste your resume text manually below.'
+      );
+    } finally {
+      setIsUploadingPdf(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const handleRunAnalysis = async () => {
-    if (!resumeText.trim() || !jobDescription.trim()) {
-      alert('Please provide both your resume text and the target job description to run an accurate analysis.');
+  // Run Real Gemini AI Analysis
+  const handleAnalyzeSkills = async () => {
+    setAnalysisError(null);
+
+    // Form validation
+    if (!jobTitle.trim()) {
+      setAnalysisError('Please enter a target job title.');
+      return;
+    }
+
+    if (!jobDescription.trim() || jobDescription.trim().length < 20) {
+      setAnalysisError('Please provide a complete job description (at least 20 characters).');
+      return;
+    }
+
+    if (!resumeText.trim() || resumeText.trim().length < 20) {
+      setAnalysisError('Please provide your resume content by uploading a PDF or pasting your resume text (at least 20 characters).');
       return;
     }
 
     setIsAnalyzing(true);
 
     try {
-      // Call server backend endpoint for intelligent skill gap and roadmap generation
-      const res = await fetch('/api/roadmap/generate', {
+      const response = await fetch('/api/skill-gap/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          targetRole,
-          targetTier: targetCompany,
-          currentSkills: resumeText,
-          projectExperience: resumeText,
-          collegeMajor: 'Computer Science',
-          gradYear: '2026'
-        })
+          resumeText,
+          jobTitle: jobTitle.trim(),
+          jobDescription: jobDescription.trim(),
+          experienceLevel,
+        }),
       });
 
-      const data = await res.json();
-      const roadmapData = data?.data;
+      const data = await response.json();
 
-      // Calculate realistic skill match
-      const isAIML = targetRole.toLowerCase().includes('machine learning') || targetRole.toLowerCase().includes('ai');
-      const isDevOps = targetRole.toLowerCase().includes('devops') || targetRole.toLowerCase().includes('cloud');
-
-      let matchedSkills: string[] = [];
-      let missingSkills: MissingSkill[] = [];
-
-      if (isAIML) {
-        matchedSkills = ['Python', 'NumPy & Pandas', 'Scikit-Learn', 'Git', 'Data Cleaning', 'SQL Basics'];
-        missingSkills = [
-          { name: 'PyTorch & Transformers', category: 'Deep Learning', priority: 'High', description: 'Essential for model fine-tuning and modern architectures.' },
-          { name: 'Vector Databases (Chroma/Pinecone)', category: 'RAG & Retrieval', priority: 'High', description: 'Used to ground LLM reasoning in enterprise documents.' },
-          { name: 'FastAPI Production Serving', category: 'Backend & APIs', priority: 'Medium', description: 'Standard high-speed async framework for hosting ML inference.' },
-          { name: 'Docker & GPU Optimization', category: 'Infrastructure', priority: 'Medium', description: 'Deploying model containers with CUDA support.' }
-        ];
-      } else if (isDevOps) {
-        matchedSkills = ['Linux Administration', 'Bash Scripting', 'Git', 'Basic Docker', 'Networking (TCP/IP)'];
-        missingSkills = [
-          { name: 'Kubernetes (K8s)', category: 'Orchestration', priority: 'High', description: 'Container orchestration, pods, deployments, and services.' },
-          { name: 'Terraform (IaC)', category: 'Cloud Infrastructure', priority: 'High', description: 'Automating declarative infrastructure across cloud providers.' },
-          { name: 'GitHub Actions CI/CD', category: 'Automation', priority: 'High', description: 'Automated test matrices and production deployment pipelines.' },
-          { name: 'Prometheus & Grafana', category: 'Observability', priority: 'Medium', description: 'Metrics gathering, dashboards, and alerting systems.' }
-        ];
-      } else {
-        matchedSkills = ['React.js', 'TypeScript', 'Node.js & Express', 'RESTful APIs', 'Git', 'HTML5 / CSS3', 'SQL'];
-        missingSkills = [
-          { name: 'Distributed Caching (Redis)', category: 'Backend Performance', priority: 'High', description: 'Accelerating read queries and preventing database bottlenecks.' },
-          { name: 'Containerization (Docker)', category: 'DevOps', priority: 'High', description: 'Standardizing development and deployment across cloud environments.' },
-          { name: 'CI/CD Pipelines (GitHub Actions)', category: 'Quality & Automation', priority: 'Medium', description: 'Automating unit test execution and artifact deployment.' },
-          { name: 'System Design Architecture', category: 'Systems', priority: 'Medium', description: 'Handling load balancers, database sharding, and stateless microservices.' }
-        ];
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Gemini API analysis failed. Please verify your inputs and try again.');
       }
 
-      // 4-Week Roadmap structured for the role
-      const generatedRoadmap: WeekPlan[] = roadmapData?.weeklyRoadmap?.map((item: any, idx: number) => ({
-        week: idx + 1,
-        title: item.phase || `Week ${idx + 1}: ${item.focusTitle || 'Core Focus'}`,
-        focusArea: item.focusTitle || 'Technical Competency Upgrading',
-        description: item.learningObjectives?.join('. ') || 'Master essential patterns to bridge your highest-priority skill gaps.',
-        handsOnProject: item.handsOnProject || 'Build a production-grade portfolio project with automated tests.',
-        milestones: [
-          { id: `w${idx + 1}-m1`, task: `Complete deep-dive tutorial on ${item.focusTitle || 'core technology'}`, completed: idx === 0, resourceTitle: item.recommendedResources?.[0] || 'Official Documentation' },
-          { id: `w${idx + 1}-m2`, task: `Implement hands-on architecture spike in personal repository`, completed: false, resourceTitle: 'GitHub Architecture Boilerplate' },
-          { id: `w${idx + 1}-m3`, task: `Benchmark and profile performance metrics`, completed: false, resourceTitle: 'Benchmarking Best Practices' },
-          { id: `w${idx + 1}-m4`, task: `Document architectural trade-offs in GitHub README`, completed: false, resourceTitle: 'Technical Writing for Engineers' }
-        ]
-      })) || [
-        {
-          week: 1,
-          title: 'Week 1: Core Performance & Caching',
-          focusArea: 'Redis & Backend Profiling',
-          description: 'Master in-memory caching to elevate your backend from basic CRUD to enterprise scale.',
-          handsOnProject: 'Build a high-throughput API rate-limiter & cached search endpoint with Redis.',
-          milestones: [
-            { id: 'w1-m1', task: 'Understand Redis in-memory storage paradigms', completed: true, resourceTitle: 'Redis Crash Course' },
-            { id: 'w1-m2', task: 'Integrate cache-aside pattern into Express backend', completed: false, resourceTitle: 'Node.js Redis Guide' },
-            { id: 'w1-m3', task: 'Benchmark latency with autocannon', completed: false, resourceTitle: 'HTTP Load Testing' }
-          ]
-        },
-        {
-          week: 2,
-          title: 'Week 2: Docker & Environment Isolation',
-          focusArea: 'Dockerfiles & Docker Compose',
-          description: 'Package apps into production-ready containers.',
-          handsOnProject: 'Full-stack application running with single docker-compose up.',
-          milestones: [
-            { id: 'w2-m1', task: 'Write multi-stage Dockerfile for client & server', completed: false, resourceTitle: 'Docker Production Guide' },
-            { id: 'w2-m2', task: 'Set up multi-service compose with persistent volumes', completed: false, resourceTitle: 'Compose V2 Spec' }
-          ]
-        },
-        {
-          week: 3,
-          title: 'Week 3: CI/CD & Automated Testing',
-          focusArea: 'GitHub Actions & Quality Gating',
-          description: 'Automate testing, linting, and deployment on every git commit.',
-          handsOnProject: 'Automated CI/CD pipeline with unit tests and Docker image builds.',
-          milestones: [
-            { id: 'w3-m1', task: 'Configure GitHub Actions test runner', completed: false, resourceTitle: 'GitHub Actions Workflows' },
-            { id: 'w3-m2', task: 'Add code quality and security scanners', completed: false, resourceTitle: 'DevSecOps Basics' }
-          ]
-        },
-        {
-          week: 4,
-          title: 'Week 4: Portfolio Showcase & Interview Prep',
-          focusArea: 'System Architecture & STAR Stories',
-          description: 'Package your projects into portfolio-grade repositories and prepare for technical interviews.',
-          handsOnProject: 'Comprehensive GitHub documentation with live demo and architecture diagrams.',
-          milestones: [
-            { id: 'w4-m1', task: 'Create architecture diagram in Mermaid.js', completed: false, resourceTitle: 'System Design Patterns' },
-            { id: 'w4-m2', task: 'Rehearse 4 STAR behavioral interview responses', completed: false, resourceTitle: 'STAR Behavioral Matrix' }
-          ]
-        }
-      ];
-
-      const score = roadmapData?.readinessScore || (isAIML ? 65 : isDevOps ? 72 : 78);
-
       const result: AnalysisResult = {
+        ...data.data,
         id: `analysis-${Date.now()}`,
         timestamp: new Date().toISOString(),
-        targetRole,
-        targetCompany,
-        resumeFileName: fileName || 'Uploaded_Resume.pdf',
-        resumeSnippet: resumeText.slice(0, 300),
-        jobDescriptionSnippet: jobDescription.slice(0, 300),
-        matchScore: score,
-        atsCompatibilityScore: Math.min(95, score + 6),
-        matchedSkills,
-        missingSkills,
-        summary: `Your background demonstrates strong fundamentals with a ${score}% match for ${targetRole} at ${targetCompany}. By addressing the ${missingSkills.length} critical infrastructure/framework gaps in your customized 4-week roadmap, your resume will rank in the top quartile of applicants.`,
-        keyRecommendations: [
-          `Focus Week 1 on bridging your highest-priority gap: ${missingSkills[0]?.name || 'Core Frameworks'}.`,
-          'Add quantitative impact metrics to your past project descriptions.',
-          'Deploy a live containerized demonstration on Cloud Run or Render.'
-        ],
-        roadmap: generatedRoadmap
+        resumeFileName: uploadedFileName || 'Manual Text Input',
+        resumeSnippet: resumeText,
+        jobDescriptionSnippet: jobDescription,
       };
 
       onAnalysisComplete(result);
-    } catch (err) {
-      console.error('Analysis failed:', err);
+    } catch (err: any) {
+      console.error('Skill gap analysis error:', err);
+      setAnalysisError(err.message || 'Analysis could not be completed. Please check your network and retry.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -243,50 +177,26 @@ Projects:
   return (
     <div className="py-8 md:py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10 animate-in fade-in duration-300">
       
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-slate-800">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs uppercase font-extrabold tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
-              Gap Detector
-            </span>
-            <span className="text-xs text-slate-400">Step 2 of Career Readiness</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-tight">
-            Skill Gap <span className="bg-gradient-to-r from-cyan-400 to-indigo-400 bg-clip-text text-transparent">Analysis</span>
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Compare your resume against any target job description to discover missing keywords, technical gaps, and action items.
-          </p>
+      {/* Page Header */}
+      <div className="pb-6 border-b border-slate-800">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs uppercase font-extrabold tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+            Competency Gap Engine
+          </span>
+          <span className="text-xs text-slate-400">Powered by Gemini 3.8 Flash</span>
         </div>
-
-        {/* Preset Selector for Fast Hackathon Demo */}
-        <div className="flex items-center flex-wrap gap-2">
-          <span className="text-xs font-semibold text-slate-400 mr-1">Demo Profiles:</span>
-          {[
-            { id: 'fullstack', label: 'Full Stack' },
-            { id: 'aiml', label: 'AI/ML' },
-            { id: 'devops', label: 'Cloud/DevOps' },
-          ].map((preset) => (
-            <button
-              key={preset.id}
-              onClick={() => handleApplyPreset(preset.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                activePreset === preset.id
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-400/40'
-                  : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
-              }`}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-tight">
+          Skill Gap <span className="bg-gradient-to-r from-cyan-400 to-indigo-400 bg-clip-text text-transparent">Analysis</span>
+        </h1>
+        <p className="text-slate-400 text-sm mt-1 max-w-2xl">
+          Upload your resume and paste your target job requirements. Our AI performs an objective evaluation, identifying matched strengths, partially demonstrated areas, and high-priority gaps.
+        </p>
       </div>
 
-      {/* Main Form Grid */}
+      {/* Input Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* Left Column: Target Role & Job Description */}
+        {/* Left Column: Target Job Details */}
         <div className="lg:col-span-6 space-y-6">
           <div className="rounded-3xl p-6 sm:p-7 bg-slate-900/60 backdrop-blur-xl border border-slate-800 shadow-xl space-y-5">
             <div className="flex items-center gap-2.5 pb-3 border-b border-slate-800">
@@ -294,64 +204,64 @@ Projects:
                 <Briefcase className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">Target Position Details</h2>
-                <span className="text-[11px] text-slate-400">Define what recruiters are looking for</span>
+                <h2 className="text-base font-bold text-white">Target Position & Requirements</h2>
+                <span className="text-[11px] text-slate-400">Specify what you are applying for</span>
               </div>
             </div>
 
+            {/* Job Title & Experience Level */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  Target Job Title
+                  Target Job Title <span className="text-rose-400">*</span>
                 </label>
                 <input
                   type="text"
-                  value={targetRole}
-                  onChange={(e) => setTargetRole(e.target.value)}
-                  placeholder="e.g. Full Stack Engineer"
+                  value={jobTitle}
+                  onChange={(e) => setJobTitle(e.target.value)}
+                  placeholder="e.g. Junior Full Stack Engineer"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-cyan-400 transition-colors"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  Target Company / Industry
+                  Experience Level <span className="text-rose-400">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={targetCompany}
-                  onChange={(e) => setTargetCompany(e.target.value)}
-                  placeholder="e.g. Google, Stripe, High-growth SaaS"
+                <select
+                  value={experienceLevel}
+                  onChange={(e) => setExperienceLevel(e.target.value as any)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-cyan-400 transition-colors"
-                />
+                >
+                  <option value="Beginner">Beginner (Student / 0-1 yr)</option>
+                  <option value="Intermediate">Intermediate (1-3 yrs)</option>
+                  <option value="Experienced">Experienced (3+ yrs)</option>
+                </select>
               </div>
             </div>
 
+            {/* Target Job Description */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-slate-300">
-                  Target Job Description & Requirements
+                  Target Job Description <span className="text-rose-400">*</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={() => handleApplyPreset('fullstack')}
-                  className="text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold"
-                >
-                  Paste Sample Job Listing
-                </button>
+                <span className="text-[11px] text-slate-500">
+                  {jobDescription.length} characters
+                </span>
               </div>
               <textarea
-                rows={7}
+                rows={9}
                 value={jobDescription}
                 onChange={(e) => setJobDescription(e.target.value)}
-                placeholder="Paste the job description, required qualifications, and desired technologies here..."
+                placeholder="Paste the full job posting, required qualifications, technical stack, and responsibilities here..."
                 className="w-full p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs sm:text-sm font-mono focus:outline-none focus:border-cyan-400 transition-colors resize-none leading-relaxed"
               />
             </div>
           </div>
         </div>
 
-        {/* Right Column: Resume Input & Upload */}
+        {/* Right Column: Resume Upload & Manual Paste */}
         <div className="lg:col-span-6 space-y-6">
           <div className="rounded-3xl p-6 sm:p-7 bg-slate-900/60 backdrop-blur-xl border border-slate-800 shadow-xl space-y-5">
             <div className="flex items-center gap-2.5 pb-3 border-b border-slate-800">
@@ -359,63 +269,79 @@ Projects:
                 <FileText className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">Your Resume & Skills</h2>
-                <span className="text-[11px] text-slate-400">Paste your resume content or project bullet points</span>
+                <h2 className="text-base font-bold text-white">Candidate Resume</h2>
+                <span className="text-[11px] text-slate-400">Upload PDF or paste your background</span>
               </div>
             </div>
 
-            {/* Quick Upload Simulation Box */}
-            <div className="p-4 rounded-2xl border border-dashed border-indigo-500/30 bg-slate-950/60 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-indigo-600/20 text-indigo-400">
-                  <UploadCloud className="w-5 h-5 text-cyan-400" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white">
-                    {fileName ? fileName : 'Upload Resume File (PDF / DOCX)'}
+            {/* PDF Upload Box */}
+            <div className="p-4 rounded-2xl border border-dashed border-indigo-500/30 bg-slate-950/70 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-indigo-600/20 text-cyan-400 shrink-0">
+                    <UploadCloud className="w-5 h-5" />
                   </div>
-                  <div className="text-[11px] text-slate-400">
-                    {fileName ? 'Ready for AI parsing' : 'Or paste resume text directly below'}
+                  <div>
+                    <div className="text-xs font-bold text-white">
+                      Upload PDF Resume
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Standard text-based PDF (Max 5 MB)
+                    </div>
                   </div>
                 </div>
+
+                <label className="cursor-pointer px-4 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/25 transition-all">
+                  {isUploadingPdf ? 'Parsing...' : 'Select PDF'}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,application/pdf"
+                    disabled={isUploadingPdf}
+                    onChange={handleFileUpload}
+                  />
+                </label>
               </div>
 
-              <label className="cursor-pointer px-3 py-1.5 rounded-xl text-xs font-bold text-indigo-300 bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-500/30 transition-colors">
-                Browse
-                <input 
-                  type="file" 
-                  className="hidden" 
-                  accept=".pdf,.docx,.txt"
-                  onChange={(e) => {
-                    if (e.target.files?.[0]) {
-                      setFileName(e.target.files[0].name);
-                      if (!resumeText) {
-                        handleApplyPreset(activePreset);
-                      }
-                    }
-                  }} 
-                />
-              </label>
+              {/* Extraction Feedback Messages */}
+              {pdfUploadError && (
+                <div className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{pdfUploadError}</span>
+                </div>
+              )}
+
+              {pdfSuccessMessage && (
+                <div className="p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{pdfSuccessMessage}</span>
+                </div>
+              )}
             </div>
 
+            {/* Alternative Textarea */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-slate-300">
-                  Resume Content & Project Descriptions
+                  Or Paste Resume Content Manually <span className="text-rose-400">*</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={() => handleApplyPreset('fullstack')}
-                  className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold"
-                >
-                  Paste Sample CS Resume
-                </button>
+                {resumeText && (
+                  <button
+                    type="button"
+                    onClick={() => { setResumeText(''); setUploadedFileName(''); setPdfSuccessMessage(null); }}
+                    className="text-[11px] text-slate-500 hover:text-slate-300 flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    <span>Clear text</span>
+                  </button>
+                )}
               </div>
               <textarea
-                rows={7}
+                rows={9}
                 value={resumeText}
                 onChange={(e) => setResumeText(e.target.value)}
-                placeholder="Paste your education, skills, technical projects, and experience bullets..."
+                placeholder="Paste your education, technical skills, projects, and work experience here if not uploading a PDF..."
                 className="w-full p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs sm:text-sm font-mono focus:outline-none focus:border-indigo-400 transition-colors resize-none leading-relaxed"
               />
             </div>
@@ -424,102 +350,406 @@ Projects:
 
       </div>
 
-      {/* Action Strip */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950/50 to-slate-900 border border-indigo-500/30 shadow-2xl">
-        <div className="flex items-center gap-3 text-center sm:text-left">
+      {/* Analysis Error Message & Retry Control */}
+      {analysisError && (
+        <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/40 text-rose-200 text-sm flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-bold">Analysis Error</div>
+              <p className="text-xs text-rose-300 mt-0.5">{analysisError}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleAnalyzeSkills}
+            className="px-3.5 py-1.5 rounded-xl bg-rose-900/60 hover:bg-rose-800/60 text-white text-xs font-bold border border-rose-500/40 flex items-center gap-1.5 shrink-0"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
+
+      {/* Primary Action Button */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950/60 to-slate-900 border border-indigo-500/30 shadow-2xl">
+        <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0 hidden sm:flex">
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
             <div className="text-sm font-bold text-white">
-              Instant AI Gap Analysis & 4-Week Roadmap
+              Ready for Real-Time AI Evaluation
             </div>
             <div className="text-xs text-slate-400">
-              Evaluates keyword density, frameworks, systems depth, and creates adaptive milestones.
+              Gemini will classify skills, highlight evidence, prioritize gaps, and formulate your 4-week roadmap.
             </div>
           </div>
         </div>
 
         <button
-          onClick={handleRunAnalysis}
+          onClick={handleAnalyzeSkills}
           disabled={isAnalyzing}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-cyan-500 via-indigo-600 to-violet-600 hover:from-cyan-400 hover:via-indigo-500 hover:to-violet-500 shadow-xl shadow-indigo-600/30 hover:shadow-cyan-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-cyan-500 via-indigo-600 to-violet-600 hover:from-cyan-400 hover:via-indigo-500 hover:to-violet-500 shadow-xl shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
         >
           {isAnalyzing ? (
             <>
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              <span>Analyzing Resume with AI...</span>
+              <span>Analyzing Skills with Gemini 3.8 Flash...</span>
             </>
           ) : (
             <>
               <Zap className="w-4 h-4 text-cyan-200 fill-cyan-200" />
-              <span>Analyze Skills & Generate Plan</span>
+              <span>Analyze My Skills</span>
               <ArrowRight className="w-4 h-4" />
             </>
           )}
         </button>
       </div>
 
-      {/* Active Analysis Preview (if present) */}
+      {/* Real Gemini Analysis Results Display */}
       {currentAnalysis && (
-        <div className="rounded-3xl p-6 sm:p-8 bg-slate-900/60 backdrop-blur-xl border border-indigo-500/30 shadow-2xl space-y-6 animate-in slide-in-from-bottom-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <div className="rounded-3xl p-6 sm:p-8 bg-slate-900/60 backdrop-blur-xl border border-indigo-500/30 shadow-2xl space-y-8 animate-in slide-in-from-bottom-6">
+          
+          {/* Top Result Banner */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-slate-800">
             <div>
-              <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block mb-1">
-                Analysis Complete
-              </span>
-              <h2 className="text-xl sm:text-2xl font-bold text-white">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                  Analysis Complete
+                </span>
+                <span className="text-xs text-slate-500">•</span>
+                <span className="text-xs text-slate-400 font-mono">
+                  {new Date(currentAnalysis.timestamp).toLocaleString()}
+                </span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
                 Match Results for {currentAnalysis.targetRole}
               </h2>
+              <div className="text-xs text-slate-400 mt-1">
+                Experience Level: <span className="text-cyan-300 font-semibold">{currentAnalysis.experienceLevel}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
+
+            {/* Navigation CTA Buttons */}
+            <div className="flex items-center flex-wrap gap-3">
               <button
                 onClick={() => onNavigate('roadmap')}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-600/30 transition-all"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02]"
               >
-                <span>Open 4-Week Roadmap</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>Generate My 4-Week Roadmap</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                onClick={() => onNavigate('roadmap')}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors"
+              >
+                <span>View My Roadmap</span>
+                <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="p-5 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center justify-between">
-              <div>
-                <div className="text-xs text-slate-400 font-semibold uppercase">Skill Match Score</div>
-                <div className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400 mt-1">
-                  {currentAnalysis.matchScore}%
+          {/* Visual Match Score & Explanation */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center p-6 rounded-2xl bg-slate-950/80 border border-slate-800">
+            {/* Visual Gauge */}
+            <div className="md:col-span-4 flex flex-col items-center justify-center text-center p-4">
+              <div className="relative w-32 h-32 flex items-center justify-center">
+                <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                  <circle
+                    className="text-slate-800"
+                    strokeWidth="8"
+                    stroke="currentColor"
+                    fill="transparent"
+                    r="40"
+                    cx="50"
+                    cy="50"
+                  />
+                  <circle
+                    className="text-cyan-400 transition-all duration-1000 ease-out"
+                    strokeWidth="8"
+                    strokeDasharray={251.2}
+                    strokeDashoffset={251.2 - (251.2 * currentAnalysis.matchScore) / 100}
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="transparent"
+                    r="40"
+                    cx="50"
+                    cy="50"
+                  />
+                </svg>
+                <div className="absolute flex flex-col items-center">
+                  <span className="text-3xl font-extrabold text-white">
+                    {currentAnalysis.matchScore}%
+                  </span>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                    Match Score
+                  </span>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
-                <Target className="w-6 h-6" />
-              </div>
+              <span className={`mt-2 text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                currentAnalysis.matchScore >= 75
+                  ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                  : currentAnalysis.matchScore >= 50
+                  ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                  : 'bg-rose-500/10 text-rose-300 border border-rose-500/20'
+              }`}>
+                {currentAnalysis.matchScore >= 75 ? 'Strong Candidate Fit' : currentAnalysis.matchScore >= 50 ? 'Moderate Fit with Key Gaps' : 'Significant Upleveling Needed'}
+              </span>
             </div>
 
-            <div className="p-5 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center justify-between">
-              <div>
-                <div className="text-xs text-slate-400 font-semibold uppercase">ATS Compatibility</div>
-                <div className="text-3xl font-extrabold text-emerald-400 mt-1">
-                  {currentAnalysis.atsCompatibilityScore}/100
-                </div>
+            {/* Score Explanation */}
+            <div className="md:col-span-8 space-y-2">
+              <div className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5" />
+                <span>How This Score Was Determined</span>
               </div>
-              <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-            </div>
-
-            <div className="p-5 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center justify-between">
-              <div>
-                <div className="text-xs text-slate-400 font-semibold uppercase">Missing Gaps Detected</div>
-                <div className="text-3xl font-extrabold text-rose-400 mt-1">
-                  {currentAnalysis.missingSkills.length}
-                </div>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
-                <AlertCircle className="w-6 h-6" />
+              <p className="text-sm text-slate-300 leading-relaxed">
+                {currentAnalysis.scoreExplanation}
+              </p>
+              <div className="pt-2 flex flex-wrap gap-4 text-xs text-slate-400 font-mono">
+                <div>Matched: <span className="text-emerald-400 font-bold">{currentAnalysis.matchedSkills.length}</span></div>
+                <div>Partially Demonstrated: <span className="text-amber-400 font-bold">{currentAnalysis.partiallyDemonstratedSkills.length}</span></div>
+                <div>Not Found in Resume: <span className="text-rose-400 font-bold">{currentAnalysis.missingSkills.length}</span></div>
               </div>
             </div>
           </div>
+
+          {/* 3-Column Skills Classification Grid */}
+          <div className="space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Layers className="w-4 h-4 text-cyan-400" />
+              <span>Skill Classification Breakdown</span>
+            </h3>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* 1. Matched Skills */}
+              <div className="rounded-2xl p-5 bg-slate-950/70 border border-emerald-500/25 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <h4 className="text-sm font-bold text-white">Matched Skills</h4>
+                  </div>
+                  <span className="text-xs font-bold text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10">
+                    {currentAnalysis.matchedSkills.length}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Clear, verifiable evidence found in your resume.
+                </p>
+
+                <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                  {currentAnalysis.matchedSkills.length === 0 ? (
+                    <div className="text-xs text-slate-500 italic py-4 text-center">
+                      No directly matched skills identified.
+                    </div>
+                  ) : (
+                    currentAnalysis.matchedSkills.map((skill, i) => (
+                      <div key={i} className="p-3 rounded-xl bg-slate-900/80 border border-emerald-500/20 space-y-1">
+                        <div className="text-xs font-bold text-emerald-300">{skill.name}</div>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">{skill.explanation}</p>
+                        {skill.evidence && (
+                          <div className="text-[10px] text-slate-400 italic bg-slate-950/80 p-1.5 rounded border border-slate-800/80 mt-1">
+                            Evidence: "{skill.evidence}"
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* 2. Partially Demonstrated Skills */}
+              <div className="rounded-2xl p-5 bg-slate-950/70 border border-amber-500/25 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <HelpCircle className="w-4 h-4 text-amber-400" />
+                    <h4 className="text-sm font-bold text-white">Partially Demonstrated</h4>
+                  </div>
+                  <span className="text-xs font-bold text-amber-400 px-2 py-0.5 rounded bg-amber-500/10">
+                    {currentAnalysis.partiallyDemonstratedSkills.length}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Mentioned or implied, but practical depth is unclear.
+                </p>
+
+                <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                  {currentAnalysis.partiallyDemonstratedSkills.length === 0 ? (
+                    <div className="text-xs text-slate-500 italic py-4 text-center">
+                      No partially demonstrated skills found.
+                    </div>
+                  ) : (
+                    currentAnalysis.partiallyDemonstratedSkills.map((skill, i) => (
+                      <div key={i} className="p-3 rounded-xl bg-slate-900/80 border border-amber-500/20 space-y-1">
+                        <div className="text-xs font-bold text-amber-300">{skill.name}</div>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">{skill.explanation}</p>
+                        {skill.missingAspect && (
+                          <div className="text-[10px] text-amber-400/90 font-medium pt-0.5">
+                            To bridge: {skill.missingAspect}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* 3. Skills Not Found in Resume */}
+              <div className="rounded-2xl p-5 bg-slate-950/70 border border-rose-500/25 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-400" />
+                    <h4 className="text-sm font-bold text-white">Not Found in Resume</h4>
+                  </div>
+                  <span className="text-xs font-bold text-rose-400 px-2 py-0.5 rounded bg-rose-500/10">
+                    {currentAnalysis.missingSkills.length}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Required in job description but absent from resume text.
+                </p>
+
+                <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                  {currentAnalysis.missingSkills.length === 0 ? (
+                    <div className="text-xs text-slate-500 italic py-4 text-center">
+                      No missing requirements found!
+                    </div>
+                  ) : (
+                    currentAnalysis.missingSkills.map((skill, i) => (
+                      <div key={i} className="p-3 rounded-xl bg-slate-900/80 border border-rose-500/20 space-y-1">
+                        <div className="text-xs font-bold text-rose-300">{skill.name}</div>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">{skill.explanation}</p>
+                        {skill.requirement && (
+                          <div className="text-[10px] text-slate-400 italic bg-slate-950/80 p-1.5 rounded border border-slate-800/80 mt-1">
+                            Requirement: {skill.requirement}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Prioritized Skill Gaps & Urgency */}
+          {currentAnalysis.prioritizedGaps.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Target className="w-4 h-4 text-rose-400" />
+                <span>Prioritized Skill Gaps & Hiring Impact</span>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {currentAnalysis.prioritizedGaps.map((gap, i) => (
+                  <div key={i} className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-bold text-white">{gap.name}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                          gap.priority === 'High'
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                            : gap.priority === 'Medium'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {gap.priority} Priority
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        {gap.rationale}
+                      </p>
+                    </div>
+                    <div className="text-[11px] text-cyan-300/90 pt-2 border-t border-slate-900 font-medium">
+                      Impact: {gap.impactOnRole}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Suggested Projects */}
+          {currentAnalysis.recommendedProjects.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <FolderCode className="w-4 h-4 text-cyan-400" />
+                <span>Suggested Portfolio Projects to Prove Competency</span>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {currentAnalysis.recommendedProjects.map((proj, i) => (
+                  <div key={i} className="p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="text-sm font-bold text-white">{proj.title}</h4>
+                        <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">
+                          Difficulty: {proj.difficulty}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      {proj.description}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {proj.skillsDemonstrated.map((sk) => (
+                        <span key={sk} className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                          {sk}
+                        </span>
+                      ))}
+                    </div>
+                    {proj.implementationSteps && proj.implementationSteps.length > 0 && (
+                      <div className="pt-2 border-t border-slate-900 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                          Implementation Steps:
+                        </span>
+                        <ul className="list-disc list-inside text-xs text-slate-400 space-y-0.5">
+                          {proj.implementationSteps.map((step, sIdx) => (
+                            <li key={sIdx}>{step}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Integrity & Limitations Disclaimer */}
+          <div className="p-4 rounded-2xl bg-slate-950/60 border border-indigo-500/20 text-xs text-slate-400 flex items-start gap-3 leading-relaxed">
+            <ShieldAlert className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-slate-300">Methodology & Limitations Notice: </span>
+              {currentAnalysis.limitations}
+            </div>
+          </div>
+
+          {/* Bottom Action Strip to Roadmap */}
+          <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-800">
+            <div className="text-xs text-slate-400">
+              Your personalized 4-week roadmap is ready to explore based on these results.
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <button
+                onClick={() => onNavigate('roadmap')}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02]"
+              >
+                <span>Generate My 4-Week Roadmap</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => onNavigate('roadmap')}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold text-xs text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors"
+              >
+                <span>View My Roadmap</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
         </div>
       )}
 

@@ -4,7 +4,7 @@ import {
   FileText, 
   Target, 
   CalendarRange, 
-  FlaskConical, 
+  Award, 
   CheckCircle2, 
   ArrowUpRight, 
   ShieldCheck, 
@@ -71,20 +71,20 @@ export const FeaturesSection: React.FC<FeaturesSectionProps> = ({ onNavigate }) 
       ]
     },
     {
-      id: 'ai-testing',
-      title: 'Live AI Testing Studio',
-      subtitle: 'Interactive Model Playground',
-      description: 'Connect directly with our server-side Gemini 3.8 Flash pipeline. Test real-time interview prompts, question generators, and skill gap evaluations live.',
-      icon: FlaskConical,
+      id: 'portfolio-projects',
+      title: 'Targeted Portfolio Projects',
+      subtitle: 'Proof-of-Competency Artifacts',
+      description: 'Generates real-world capstone ideas tailored to your target job, providing concrete implementation steps and code deliverables to showcase to engineering leads.',
+      icon: Award,
       accent: 'border-emerald-500/30 hover:border-emerald-400/60',
-      badge: 'Gemini 3.8 Powered',
+      badge: 'Recruiter Verified',
       badgeColor: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
-      actionTab: 'test-ai' as NavTab,
-      actionText: 'Launch Test Studio',
+      actionTab: 'roadmap' as NavTab,
+      actionText: 'View Project Deliverables',
       points: [
-        'Server-side Gemini 3.8 Flash endpoints',
-        'Real-time latency and token diagnostics',
-        'Built-in hackathon test presets'
+        'End-to-end architecture recommendations',
+        'Demonstrates missing technologies in production',
+        'Official documentation & trusted resources'
       ]
     }
   ];

@@ -5,8 +5,8 @@ import {
   getAnalysisHistory, 
   getUserProgress, 
   saveRecentAnalysis, 
-  toggleMilestone, 
-  SAMPLE_ANALYSIS, 
+  toggleTask,
+  resetProgress,
   clearStoredData 
 } from './utils/storage';
 import { Navbar } from './components/Navbar';
@@ -16,7 +16,6 @@ import { FeaturesSection } from './components/FeaturesSection';
 import { DashboardView } from './components/DashboardView';
 import { SkillGapAnalysisView } from './components/SkillGapAnalysisView';
 import { RoadmapView } from './components/RoadmapView';
-import { TestAIView } from './components/TestAIView';
 import { Footer } from './components/Footer';
 
 export const App: React.FC = () => {
@@ -24,7 +23,7 @@ export const App: React.FC = () => {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [history, setHistory] = useState<AnalysisResult[]>([]);
   const [userProgress, setUserProgress] = useState<UserProgress>({
-    completedMilestoneIds: [],
+    completedTaskIds: [],
     lastUpdated: new Date().toISOString()
   });
 
@@ -46,45 +45,41 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleLoadDemo = () => {
-    saveRecentAnalysis(SAMPLE_ANALYSIS);
-    setAnalysis(SAMPLE_ANALYSIS);
-    setHistory(getAnalysisHistory());
-    setUserProgress({
-      completedMilestoneIds: ['w1-m1', 'w1-m2'],
-      lastUpdated: new Date().toISOString()
-    });
-    handleNavigate('dashboard');
-  };
-
   const handleAnalysisComplete = (newAnalysis: AnalysisResult) => {
     saveRecentAnalysis(newAnalysis);
     setAnalysis(newAnalysis);
     setHistory(getAnalysisHistory());
-    // Auto-navigate to dashboard so the user sees the newly generated cards
-    handleNavigate('dashboard');
+    // Keep user on the analysis page so they can review their detailed results
+    // and click "Generate My 4-Week Roadmap" or "View My Roadmap"
+    handleNavigate('skill-gap');
   };
 
-  const handleToggleMilestone = (milestoneId: string) => {
-    const updated = toggleMilestone(milestoneId);
+  const handleToggleTask = (taskId: string) => {
+    const updated = toggleTask(taskId);
     setUserProgress(updated);
   };
 
+  const handleResetProgress = () => {
+    const resetState = resetProgress();
+    setUserProgress(resetState);
+  };
+
   const handleClearData = () => {
-    if (window.confirm('Are you sure you want to clear stored analysis data and progress?')) {
+    if (window.confirm('Are you sure you want to clear your stored analysis and progress?')) {
       clearStoredData();
       setAnalysis(null);
       setHistory([]);
       setUserProgress({
-        completedMilestoneIds: [],
+        completedTaskIds: [],
         lastUpdated: new Date().toISOString()
       });
+      handleNavigate('home');
     }
   };
 
   return (
     <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
-      {/* Navbar with brand and navigation */}
+      {/* Modern Navbar */}
       <Navbar
         activeTab={activeTab}
         onNavigate={handleNavigate}
@@ -97,7 +92,7 @@ export const App: React.FC = () => {
           <div>
             <HomeHero 
               onNavigate={handleNavigate} 
-              onLoadDemo={handleLoadDemo} 
+              onLoadDemo={() => handleNavigate('skill-gap')} 
             />
             <HowItWorks 
               onNavigate={handleNavigate} 
@@ -115,7 +110,6 @@ export const App: React.FC = () => {
             userProgress={userProgress}
             onNavigate={handleNavigate}
             onStartNewAnalysis={() => handleNavigate('skill-gap')}
-            onLoadDemo={handleLoadDemo}
             onClearData={handleClearData}
           />
         )}
@@ -132,18 +126,14 @@ export const App: React.FC = () => {
           <RoadmapView
             analysis={analysis}
             userProgress={userProgress}
-            onToggleMilestone={handleToggleMilestone}
+            onToggleTask={handleToggleTask}
+            onResetProgress={handleResetProgress}
             onNavigate={handleNavigate}
-            onLoadDemo={handleLoadDemo}
           />
-        )}
-
-        {activeTab === 'test-ai' && (
-          <TestAIView />
         )}
       </main>
 
-      {/* Modern Footer */}
+      {/* Footer */}
       <Footer onNavigate={handleNavigate} />
     </div>
   );

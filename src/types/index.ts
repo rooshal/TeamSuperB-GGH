@@ -1,49 +1,82 @@
-export interface MissingSkill {
+export type NavTab = 'home' | 'dashboard' | 'skill-gap' | 'roadmap';
+
+export interface SkillItem {
   name: string;
-  category: string;
-  priority: 'High' | 'Medium' | 'Low';
-  description: string;
+  explanation: string;
+  evidence?: string;
 }
 
-export interface RoadmapMilestone {
+export interface PartiallyDemonstratedSkill {
+  name: string;
+  explanation: string;
+  evidence?: string;
+  missingAspect?: string;
+}
+
+export interface MissingSkillItem {
+  name: string;
+  explanation: string;
+  requirement?: string;
+}
+
+export interface PrioritizedGap {
+  name: string;
+  priority: 'High' | 'Medium' | 'Low';
+  rationale: string;
+  impactOnRole: string;
+}
+
+export interface LearningResource {
+  title: string;
+  url: string;
+  verified: boolean;
+}
+
+export interface RoadmapTask {
   id: string;
   task: string;
-  completed: boolean;
-  resourceTitle?: string;
-  resourceUrl?: string;
-  estimatedHours?: number;
+  estimatedHours: number;
+  deliverable: string;
+  resources: LearningResource[];
 }
 
-export interface WeekPlan {
+export interface FourWeekRoadmapItem {
   week: number;
   title: string;
-  focusArea: string;
+  weeklyGoal: string;
+  skillsToLearn: string[];
+  tasks: RoadmapTask[];
+}
+
+export interface RecommendedProject {
+  title: string;
   description: string;
-  handsOnProject: string;
-  milestones: RoadmapMilestone[];
+  skillsDemonstrated: string[];
+  difficulty: string;
+  implementationSteps: string[];
 }
 
 export interface AnalysisResult {
   id: string;
   timestamp: string;
   targetRole: string;
-  targetCompany?: string;
+  experienceLevel: 'Beginner' | 'Intermediate' | 'Experienced';
   resumeFileName?: string;
   resumeSnippet: string;
   jobDescriptionSnippet: string;
   matchScore: number; // 0 to 100
-  atsCompatibilityScore: number; // 0 to 100
-  matchedSkills: string[];
-  missingSkills: MissingSkill[];
-  summary: string;
-  keyRecommendations: string[];
-  roadmap: WeekPlan[];
+  scoreExplanation: string;
+  matchedSkills: SkillItem[];
+  partiallyDemonstratedSkills: PartiallyDemonstratedSkill[];
+  missingSkills: MissingSkillItem[]; // Skills Not Found in Resume
+  prioritizedGaps: PrioritizedGap[];
+  fourWeekRoadmap: FourWeekRoadmapItem[];
+  recommendedProjects: RecommendedProject[];
+  limitations: string;
+  isRealAiResponse?: boolean;
 }
 
 export interface UserProgress {
-  completedMilestoneIds: string[];
+  completedTaskIds: string[];
   lastUpdated: string;
-  notes?: Record<string, string>;
 }
-
-export type NavTab = 'home' | 'dashboard' | 'skill-gap' | 'roadmap' | 'test-ai';
